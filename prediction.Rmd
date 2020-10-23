@@ -1,0 +1,163 @@
+---
+title: 'Practical Machine Learning : Prediction  Assignment'
+author: "Ribhav"
+date: "20/10/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Intro
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+## Data
+
+for training dataset, Check out the below link for Training Data of the project
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+for test data too  Check out the link for Testing data of the project.
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+## Understanding Data
+
+```{r}
+
+testData<-read.csv("pml-testing.csv")
+trainData<-read.csv("pml-training.csv")
+dim(trainData)
+```
+
+There are 160 variables and 19622 observations in the training set given.
+
+## Data cleaning
+
+In this training dataset, most of the variables have missing values and therefore we need to clean our data.
+
+```{r, warning=FALSE,message=FALSE}
+#First loading the necessary libraries for cleaning and rest of the prediction.
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+library(caTools)
+library(e1071)
+library(Amelia)
+```
+
+### Splitting the data into train and test sets.
+```{r}
+set.seed(222)
+sampleData<-sample.split(trainData$classe,SplitRatio = 0.8)
+trainSet<-subset(trainData,sampleData==TRUE)
+testSet<-subset(trainData,sampleData==FALSE)
+dim(trainSet)
+dim(testSet)
+```
+
+
+### Removing variables with low variance
+```{r}
+nearZero <- nearZeroVar(trainData)
+trainSet <- trainSet[, -nearZero]
+testSet  <- testSet[, -nearZero]
+dim(trainSet)
+dim(testSet)
+# Missing data check
+missmap(trainSet)
+```
+
+
+To get a proper predictive model, we need to delete the missing and insignificant data values.
+
+### Removing missing(NA) values
+```{r}
+missingvalues   <- sapply(trainSet, function(x) mean(is.na(x))) > 0.95
+trainSet <- trainSet[, missingvalues==FALSE]
+testSet  <- testSet[, missingvalues==FALSE]
+dim(trainSet)
+dim(testSet)
+```
+
+### Remove identical variables 
+```{r}
+trainSet <- trainSet[, -(1:5)]
+testSet  <- testSet[, -(1:5)]
+dim(trainSet)
+dim(testSet)
+```
+Now that we are left with the proper values to help us build the model,  we also need to check the correlationData between the variables
+
+###Checking the Missing data in the new cleaned data
+```{r}
+missmap(trainSet)
+```
+
+Since we do not have any missing data we can continue to build the model after checking for correlationData.
+
+### Null Hypothesis
+
+NullHyp<-lm(classe~., data=trainSet)
+
+summary(NullHyp)
+
+We observe that the p value of independent variables are very low so we can reject the null hypothesis.
+
+## correlationData in variables
+
+in trainset plotting the correlationData
+```{r }
+correlationData<-cor(trainSet[, -length(names(trainSet))])
+corrplot(correlationData, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+The dark colors in the graph above represents the highly correlated variables. 
+
+# Model test for prediction
+
+## A) Decision Tree Model Prediction
+```{r}
+TreeData<-rpart(classe~.,trainSet,method="class")
+rpart.plot(TreeData)
+# Predicting testset result using the above model
+predictionData<-predict(TreeData, newdata=testSet,type="class")
+confusionMat<-confusionMatrix(predictionData,testSet$classe)
+confusionMat
+```
+
+
+## B) Random Forest Model Prediction
+
+ForestData<- trainControl(method="cv", number=3, verboseIter=FALSE)
+
+forestmodeldata <- train(classe ~ ., data=trainSet, method="rf", trControl=ForestData)
+
+forestmodeldata$finalModel
+
+forestPrediction <- predict(forestmodeldata , newdata=testSet)                         
+
+forestConfusionMat<-confusionMatrix(forestPrediction,testSet$classe)
+
+Model is tested but due to very slow rendering of the results, those results are not displayed here. The details of accuracy of this model are given below.
+
+Below are the accuracies of the models that we have tested on the training set
+a) Decision Tree Model : 73.13%
+b) Random Forest Model : 99.85%
+
+It is evident that Random Forest Model is most accurate and it will be the suitable
+model to accurately predict the Test Dataset
+
+# Applying Approriate Model to the Test Dataset
+```{r}
+# As the Random Forest model is appropriate to use but due to the very sluggish rendering of the results with not so compatible system RAM, I am predicting the results using the Decision Tree Model 
+predictTestResults<-predict(TreeData,newdata=testData, type="class" )
+predictTestResults
+```
+
+#### The accuracy of this Test Data is about above 80%. The accuracy would have been higher if used the RandomForest model but due to very slow rendering of the output, it wasn't successful on my System.
